@@ -1,0 +1,381 @@
+From 2caeaf98f22079f98c8c0f8850aa83cc5eea68a6 Mon Sep 17 00:00:00 2001
+From: fruscai <103607006+fruscai@users.noreply.github.com>
+Date: Tue, 11 Aug 2026 18:34:56 -0400
+Subject: [PATCH 2/2] Add "Save with embedded samples" save option
+
+Writes each referenced sample into the project file as base64 instead of
+pointing at it on disk, so the project opens and plays on a machine that
+does not have the audio files. This is the same idea as a project bundle,
+minus the folder: the result is still a single .mmpz.
+
+The save path already threaded a bool down to DataFile::writeFile for
+bundling. There are three ways to save now, so that becomes a SaveMode
+enum and embedResources() sits next to copyResources(), walking the same
+ELEMENTS_WITH_RESOURCES map.
+
+Two things worth calling out:
+
+Embedded audio carries no sample rate. SampleBuffer::fromBase64 assumes
+the engine rate while fromFile hands back the file's own rate, so a
+sample recorded at anything else plays back at the wrong speed. A 48 kHz
+source embedded as-is renders a 220 Hz tone at 202 Hz. embedResources()
+converts to the engine rate through AudioResampler first.
+
+AudioResampler always passes end_of_input = 0, so libsamplerate keeps the
+last frames in its filter delay and never flushes them, truncating the
+end of every sample (144 frames for a 48 kHz source at SincBest). The
+input is padded with silence to push the tail through and the output is
+cut back to the expected length.
+
+"src" is read before "sampledata" when loading, so it is removed rather
+than blanked. factorysample: references are left alone, since they
+resolve on any install and embedding them only inflates the file.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ include/DataFile.h                     |  11 +-
+ include/Song.h                         |   9 +-
+ include/VersionedSaveDialog.h          |   1 +
+ src/core/DataFile.cpp                  | 140 ++++++++++++++++++++++++-
+ src/core/Song.cpp                      |  15 ++-
+ src/core/main.cpp                      |   2 +-
+ src/gui/modals/VersionedSaveDialog.cpp |   5 +
+ 7 files changed, 175 insertions(+), 8 deletions(-)
+
+diff --git a/include/DataFile.h b/include/DataFile.h
+index 38e67f10..92d0a1a2 100644
+--- a/include/DataFile.h
++++ b/include/DataFile.h
+@@ -59,6 +59,14 @@ public:
+ 		MidiClip
+ 	} ;
+ 
++	//! How sample references are handled when the project is written out.
++	enum class SaveMode
++	{
++		Plain,	  //!< Leave every path as it is.
++		Bundle,	  //!< Copy the files into a resources folder and rewrite the paths to "local:".
++		Embedded, //!< Write the audio itself into the project as base64 and drop the paths.
++	} ;
++
+ 	DataFile( const QString& fileName );
+ 	DataFile( const QByteArray& data );
+ 	DataFile( Type type );
+@@ -74,8 +82,9 @@ public:
+ 	QString nameWithExtension( const QString& fn ) const;
+ 
+ 	void write( QTextStream& strm );
+-	bool writeFile(const QString& fn, bool withResources = false);
++	bool writeFile(const QString& fn, SaveMode mode = SaveMode::Plain);
+ 	bool copyResources(const QString& resourcesDir); //!< Copies resources to the resourcesDir and changes the DataFile to use local paths to them
++	bool embedResources(); //!< Reads each referenced sample and stores its audio in the DataFile itself, so the project needs no external files
+ 	bool hasLocalPlugins(QDomElement parent = QDomElement(), bool firstCall = true) const;
+ 
+ 	QDomElement& content()
+diff --git a/include/Song.h b/include/Song.h
+index 1c18cbbb..7b6c926b 100644
+--- a/include/Song.h
++++ b/include/Song.h
+@@ -33,6 +33,7 @@
+ 
+ #include "AudioEngine.h"
+ #include "Controller.h"
++#include "DataFile.h"
+ #include "Metronome.h"
+ #include "lmms_constants.h"
+ #include "MeterModel.h"
+@@ -88,10 +89,16 @@ public:
+ 		 * Should we save the project as a project bundle? (with resources)
+ 		 */
+ 		BoolModel saveAsProjectBundle{false};
++		/**
++		 * Should we write the sample audio into the project file itself,
++		 * so it plays on a machine that does not have the audio files?
++		 */
++		BoolModel saveWithEmbeddedSamples{false};
+ 
+ 		void setDefaultOptions() {
+ 			discardMIDIConnections.setValue(false);
+ 			saveAsProjectBundle.setValue(false);
++			saveWithEmbeddedSamples.setValue(false);
+ 		}
+ 	};
+ 
+@@ -250,7 +257,7 @@ public:
+ 	void loadProject( const QString & filename );
+ 	bool guiSaveProject();
+ 	bool guiSaveProjectAs(const QString & filename);
+-	bool saveProjectFile(const QString & filename, bool withResources = false);
++	bool saveProjectFile(const QString & filename, DataFile::SaveMode mode = DataFile::SaveMode::Plain);
+ 
+ 	const QString & projectFileName() const
+ 	{
+diff --git a/include/VersionedSaveDialog.h b/include/VersionedSaveDialog.h
+index 6d707cd5..87d40586 100644
+--- a/include/VersionedSaveDialog.h
++++ b/include/VersionedSaveDialog.h
+@@ -44,6 +44,7 @@ public:
+ private:
+ 	LedCheckBox *m_discardMIDIConnectionsCheckbox;
+ 	LedCheckBox *m_saveAsProjectBundleCheckbox;
++	LedCheckBox *m_saveWithEmbeddedSamplesCheckbox;
+ };
+ 
+ class VersionedSaveDialog : public FileDialog
+diff --git a/src/core/DataFile.cpp b/src/core/DataFile.cpp
+index 65280547..29081816 100644
+--- a/src/core/DataFile.cpp
++++ b/src/core/DataFile.cpp
+@@ -38,8 +38,11 @@
+ #include <QRegularExpression>
+ #include <QSaveFile>
+ 
++#include "AudioEngine.h"
++#include "AudioResampler.h"
+ #include "base64.h"
+ #include "ConfigManager.h"
++#include "Engine.h"
+ #include "DeprecationHelper.h"
+ #include "Effect.h"
+ #include "embed.h"
+@@ -48,6 +51,7 @@
+ #include "Note.h"
+ #include "PluginFactory.h"
+ #include "ProjectVersion.h"
++#include "SampleBuffer.h"
+ #include "SongEditor.h"
+ #include "TextFloat.h"
+ #include "Track.h"
+@@ -312,8 +316,10 @@ void DataFile::write( QTextStream & _strm )
+ 
+ 
+ 
+-bool DataFile::writeFile(const QString& filename, bool withResources)
++bool DataFile::writeFile(const QString& filename, SaveMode mode)
+ {
++	const bool withResources = mode == SaveMode::Bundle;
++
+ 	// Small lambda function for displaying errors
+ 	auto showError = [](QString title, QString body){
+ 		if (gui::getGUI() != nullptr)
+@@ -389,6 +395,18 @@ bool DataFile::writeFile(const QString& filename, bool withResources)
+ 		}
+ 	}
+ 
++	// Embedding needs no folder of its own. The audio goes into the file we are
++	// about to write, so the project stays a single file that opens anywhere.
++	if (mode == SaveMode::Embedded)
++	{
++		if (!embedResources())
++		{
++			showError(SongEditor::tr("Error"),
++				SongEditor::tr("Failed to embed samples. The project has not been saved."));
++			return false;
++		}
++	}
++
+ 	QSaveFile outfile(fullNameTemp);
+ 
+ 	if (!outfile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+@@ -527,6 +545,126 @@ bool DataFile::copyResources(const QString& resourcesDir)
+ 
+ 
+ 
++namespace {
++
++//! Convert a buffer to outputRate, returning nullptr if libsamplerate refuses the job.
++std::shared_ptr<const SampleBuffer> resampleBuffer(const SampleBuffer& buffer, sample_rate_t outputRate)
++{
++	constexpr auto channels = ch_cnt_t{2};
++	const auto ratio = static_cast<double>(outputRate) / buffer.sampleRate();
++
++	// How long the result should be if nothing is lost.
++	const auto targetFrames = static_cast<std::size_t>(std::llround(buffer.size() * ratio));
++
++	// AudioResampler always passes end_of_input = 0, so libsamplerate keeps the last
++	// few frames inside its filter delay and never flushes them. Feeding it a run of
++	// silence afterwards pushes the real tail out, and the output gets cut back to
++	// targetFrames below. Without this the end of every sample is quietly truncated,
++	// measured at 144 frames for a 48k source at SincBest.
++	constexpr auto flushFrames = std::size_t{4096};
++	auto padded = std::vector<SampleFrame>(buffer.begin(), buffer.end());
++	padded.resize(padded.size() + flushFrames);
++
++	auto output = std::vector<SampleFrame>(static_cast<std::size_t>(std::ceil(padded.size() * ratio)) + 1);
++
++	try
++	{
++		auto resampler = AudioResampler{AudioResampler::Mode::SincBest, channels};
++		resampler.setRatio(buffer.sampleRate(), outputRate);
++
++		const auto input = InterleavedBufferView<const float>{
++			reinterpret_cast<const float*>(padded.data()), channels, static_cast<f_cnt_t>(padded.size())};
++		auto view = InterleavedBufferView<float>{
++			reinterpret_cast<float*>(output.data()), channels, static_cast<f_cnt_t>(output.size())};
++
++		const auto result = resampler.process(input, view);
++		output.resize(std::min(static_cast<std::size_t>(result.outputFramesGenerated), targetFrames));
++	}
++	catch (const std::exception& e)
++	{
++		qWarning() << "ERROR: Failed to resample sample for embedding:" << e.what();
++		return nullptr;
++	}
++
++	// No audio file is passed on purpose. The buffer is the audio now, and giving it
++	// a path again would put back the external dependency this is meant to remove.
++	return std::make_shared<const SampleBuffer>(std::move(output), outputRate);
++}
++
++} // namespace
++
++
++
++
++bool DataFile::embedResources()
++{
++	const auto engineRate = Engine::audioEngine()->outputSampleRate();
++
++	for (const auto& [tagName, attributes] : ELEMENTS_WITH_RESOURCES)
++	{
++		QDomNodeList list = elementsByTagName(tagName);
++
++		for (int i = 0; !list.item(i).isNull(); ++i)
++		{
++			QDomElement el = list.item(i).toElement();
++
++			for (const auto& attribute : attributes)
++			{
++				if (!el.hasAttribute(attribute)) { continue; }
++
++				const QString reference = el.attribute(attribute);
++
++				// An empty slot is an instrument that never had a sample loaded into
++				// it. There is nothing to embed and nothing broken about it.
++				if (reference.isEmpty()) { continue; }
++
++				// factorysample: ships with LMMS and resolves on any install, so
++				// embedding it would only make the project bigger for no gain.
++				if (reference.startsWith(PathUtil::basePrefix(PathUtil::Base::FactorySample))) { continue; }
++
++				// Same fallback copyResources uses: running from the CLI with no
++				// project loaded leaves the "local:" prefix unresolved.
++				bool error = false;
++				QString path = PathUtil::toAbsolute(reference, &error);
++				if (error)
++				{
++					path = QFileInfo(m_fileName).path() + "/"
++						+ path.remove(0, PathUtil::basePrefix(PathUtil::Base::LocalDir).length());
++				}
++
++				auto buffer = SampleBuffer::fromFile(path);
++				if (!buffer || buffer->empty())
++				{
++					qWarning() << "ERROR: Failed to read sample for embedding:" << path;
++					return false;
++				}
++
++				// Embedded audio carries no sample rate of its own. fromBase64 assumes
++				// the engine rate while fromFile hands back the file's own rate, so a
++				// sample recorded at anything else plays back at the wrong speed unless
++				// it gets converted here first.
++				if (buffer->sampleRate() != engineRate)
++				{
++					buffer = resampleBuffer(*buffer, engineRate);
++					if (!buffer) { return false; }
++				}
++
++				el.setAttribute("sampledata", buffer->toBase64());
++
++				// "src" is read before "sampledata" when loading, so leaving it in place
++				// would win over the audio that was just embedded. It has to go, not be
++				// blanked.
++				el.removeAttribute(attribute);
++			}
++		}
++	}
++
++	return true;
++}
++
++
++
++
+ /**
+  * @brief This recursive method will go through all XML nodes of the DataFile
+  *        and check whether any of them have local paths. If they are not on
+diff --git a/src/core/Song.cpp b/src/core/Song.cpp
+index 1d3a7bc2..7abcbc8e 100644
+--- a/src/core/Song.cpp
++++ b/src/core/Song.cpp
+@@ -1212,7 +1212,7 @@ void Song::loadProject( const QString & fileName )
+ 
+ 
+ // only save current song as filename and do nothing else
+-bool Song::saveProjectFile(const QString & filename, bool withResources)
++bool Song::saveProjectFile(const QString & filename, DataFile::SaveMode mode)
+ {
+ 	using gui::getGUI;
+ 
+@@ -1243,7 +1243,7 @@ bool Song::saveProjectFile(const QString & filename, bool withResources)
+ 
+ 	m_savingProject = false;
+ 
+-	return dataFile.writeFile(filename, withResources);
++	return dataFile.writeFile(filename, mode);
+ }
+ 
+ 
+@@ -1263,9 +1263,16 @@ bool Song::guiSaveProjectAs(const QString & filename)
+ 	DataFile dataFile(DataFile::Type::SongProject);
+ 	QString fileNameWithExtension = dataFile.nameWithExtension(filename);
+ 
+-	bool withResources = m_saveOptions.saveAsProjectBundle.value();
++	// Bundling wins if somebody ticks both, since it is the older option and the
++	// one that keeps the samples as editable files on disk.
++	const bool withResources = m_saveOptions.saveAsProjectBundle.value();
++	const auto mode = withResources
++		? DataFile::SaveMode::Bundle
++		: m_saveOptions.saveWithEmbeddedSamples.value()
++			? DataFile::SaveMode::Embedded
++			: DataFile::SaveMode::Plain;
+ 
+-	bool const saveResult = saveProjectFile(fileNameWithExtension, withResources);
++	bool const saveResult = saveProjectFile(fileNameWithExtension, mode);
+ 
+ 	// After saving, restore default save options.
+ 	m_saveOptions.setDefaultOptions();
+diff --git a/src/core/main.cpp b/src/core/main.cpp
+index c1e72b9d..19b74c77 100644
+--- a/src/core/main.cpp
++++ b/src/core/main.cpp
+@@ -416,7 +416,7 @@ int main( int argc, char * * argv )
+ 			if (argc > i+1) // Project bundle file name given
+ 			{
+ 				printf("Making bundle\n");
+-				dataFile.writeFile(QString::fromLocal8Bit(argv[i+1]), true);
++				dataFile.writeFile(QString::fromLocal8Bit(argv[i+1]), DataFile::SaveMode::Bundle);
+ 				return EXIT_SUCCESS;
+ 			}
+ 			else
+diff --git a/src/gui/modals/VersionedSaveDialog.cpp b/src/gui/modals/VersionedSaveDialog.cpp
+index 523f6935..23373bb3 100644
+--- a/src/gui/modals/VersionedSaveDialog.cpp
++++ b/src/gui/modals/VersionedSaveDialog.cpp
+@@ -189,8 +189,13 @@ SaveOptionsWidget::SaveOptionsWidget(Song::SaveOptions &saveOptions) {
+ 	m_saveAsProjectBundleCheckbox->setText(tr("Save As Project Bundle (with resources)"));
+ 	m_saveAsProjectBundleCheckbox->setModel(&saveOptions.saveAsProjectBundle);
+ 
++	m_saveWithEmbeddedSamplesCheckbox = new LedCheckBox(nullptr);
++	m_saveWithEmbeddedSamplesCheckbox->setText(tr("Save with embedded samples (one file, no resources)"));
++	m_saveWithEmbeddedSamplesCheckbox->setModel(&saveOptions.saveWithEmbeddedSamples);
++
+ 	layout->addWidget(m_discardMIDIConnectionsCheckbox);
+ 	layout->addWidget(m_saveAsProjectBundleCheckbox);
++	layout->addWidget(m_saveWithEmbeddedSamplesCheckbox);
+ 
+ 	setLayout(layout);
+ }
+-- 
+2.39.3 (Apple Git-145)
+

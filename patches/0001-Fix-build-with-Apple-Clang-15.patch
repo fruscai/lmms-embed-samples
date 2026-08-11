@@ -1,0 +1,30 @@
+From 649a4867b7a99b02fa077094b8cdd1a04d78f02a Mon Sep 17 00:00:00 2001
+From: fruscai <103607006+fruscai@users.noreply.github.com>
+Date: Tue, 11 Aug 2026 18:34:44 -0400
+Subject: [PATCH 1/2] Fix build with Apple Clang 15
+
+Header is an aggregate, and placement-new with parentheses relies on
+parenthesized aggregate initialization (P0960), which Apple Clang 15 does
+not implement. Braces work on every compiler LMMS already supports.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ src/common/SharedMemory.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/common/SharedMemory.cpp b/src/common/SharedMemory.cpp
+index 5952b0d0..ce660ffb 100644
+--- a/src/common/SharedMemory.cpp
++++ b/src/common/SharedMemory.cpp
+@@ -140,7 +140,7 @@ public:
+ 
+ 		if (isArray)
+ 		{
+-			new (m_mapping) Header(size);
++			new (m_mapping) Header{size};
+ 		}
+ 	}
+ 
+-- 
+2.39.3 (Apple Git-145)
+
