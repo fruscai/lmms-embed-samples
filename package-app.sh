@@ -14,15 +14,18 @@ set -e
 
 SRCDIR="${1:-$HOME/Downloads/lmms-src}"
 BUILD="$SRCDIR/build"
-# Override with LMMS_EMBED_DEST to install somewhere else. Anywhere works, the
-# bundle carries its own libraries and does not care where it sits.
-# Kept as its own variable because an apostrophe in the path is a syntax error
-# inside a ${VAR:-default} expansion, even in double quotes.
+# Override with LMMS_EMBED_DEST to install somewhere else, an external drive
+# included. Anywhere works: the bundle carries its own libraries and does not
+# care where it sits.
+#
+# Keep the destination in its own variable rather than inline. An apostrophe in
+# the path is a syntax error inside a ${VAR:-default} expansion, even in double
+# quotes, which is easy to hit on a drive named after somebody.
 APP_NAME="${LMMS_EMBED_NAME:-LMMS FULL EMBED Branch V2}"
 # Its own identifier per build, so Launch Services lists each one separately
 # instead of them fighting over the .mmpz association.
 BUNDLE_ID="${LMMS_EMBED_ID:-io.lmms.embedbranch.v2}"
-DEFAULT_DEST="/Volumes/Amine's External 6TN 1/Amethyst/TOOLS/$APP_NAME.app"
+DEFAULT_DEST="/Applications/$APP_NAME.app"
 DEST="${LMMS_EMBED_DEST:-$DEFAULT_DEST}"
 LLVM=/opt/homebrew/opt/llvm/lib
 
