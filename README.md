@@ -138,6 +138,12 @@ Decode the base64 straight out of the saved file rather than trusting a render. 
 If the resample step were missing that tone would read 202 Hz. The 0.14 Hz gap is zero-crossing
 quantization, not pitch error.
 
+## Notes
+
+[`LOG.md`](LOG.md) has what was hit building this and why, dated.
+[`DECISIONS.md`](DECISIONS.md) has the reasoning behind the choices.
+[`WHERE-WE-LEFT-OFF.md`](WHERE-WE-LEFT-OFF.md) is the current state and what is still open.
+
 ## Related
 
 [lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) does the same embedding from
