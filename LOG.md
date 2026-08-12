@@ -1,5 +1,67 @@
 # Daily Log
 
+## 08-12-2026
+
+V1, and the all-element test finally running
+
+- Built V1 from `d39c82c4` and it works. It embeds AudioFileProcessor instruments AND Sample
+  tracks, not just AudioFileProcessor, using only attributes stock LMMS already understands
+- ⚠️ **an apostrophe in the path stops a full build dead.** The drive is `Amine's External 6TN 1`
+  and LMMS's ZynAddSubFx rule escapes the spaces but not the quote, so the shell dies on an
+  unterminated string. `make lmms` is fine because it never runs that codegen; packaging is not,
+  because cpack runs `make all`. Fixed with a symlink that has no apostrophe in it. Third time that
+  same apostrophe broke something
+
+The native option cannot make a 1.2 file, which was the whole original point
+
+- Checked two files our own build saved: `midiclip`, `mixer`, `mixerchannel`, `automationclip`, and
+  zero `srcdata`. LMMS 1.3 writes 1.3 element names on every save, so 1.2 cannot parse them at all
+- That has nothing to do with embedding and cannot be fixed by changing it. The 1.2 path stays with
+  the HTML tool
+- ⚠️ **do not round-trip a grader-bound project through this build.** Open a 1.2 project here, save,
+  and it is 1.3 now and will not go back
+
+Two hours lost to my own bad check
+
+- Concluded V2 was crashing on launch. It was not. `pgrep -f "Embed Branch V2"` is case sensitive
+  and the app is `FULL EMBED Branch V2`, so the pattern never matched a running process
+- Meanwhile LMMS was sitting on a recovery-file dialog, hidden behind another window, on a monitor
+  I was not capturing. Every "it exited" reading was wrong
+- Lesson worth keeping: when a check says a thing is absent, confirm the check can see the thing at
+  all. `ps -Ao pid,command | grep` showed four V2 processes the whole time
+- Also popped the access permission dialog a second time on a hunch that rebuilding invalidated the
+  grant. It had not. That interrupted real work for nothing
+
+Adding a CLI, which paid for itself immediately
+
+- Embedding was GUI only, so testing it meant driving a window and doing one project at a time.
+  Added `lmms embedsamples <in> <out>`, mirroring `makebundle`
+- **It segfaulted on the very first run.** `embedResources()` reads the engine sample rate and CLI
+  commands never start an audio engine, so the pointer is null. The GUI path could never have shown
+  this
+- Failure now names the sample it could not read. Before, the only clue was "failed to embed
+  samples", which is no help when the culprit is something like the `samples/empty.wav` that ships
+  in LMMS's own DirtyLove demo
+- ⚠️ that demo is a real reproducer: embedding **refuses the whole save** if any single reference
+  cannot be read, so V2 will not embed a stock LMMS demo project
+
+The all-element test, at last
+
+Built a project carrying one of every embeddable element, each pointed at a wave of a different
+length so a payload landing in the wrong attribute cannot pass silently. A total count would have
+missed the sampleclip bug entirely; frame counts cannot.
+
+    audiofileprocessor   4410, plus five of the demo's own samples
+    slicert              4410
+    sampleclip           8820
+    tripleoscillator     13230, 17640, 22050
+    elvol elcut elres    26460, 30869, 35280   (twice each, cloned track)
+    lfocontroller        39690
+    references still on disk: 0
+
+Then deleted every source wave and rendered from `/`: 4066144 frames, peak 27466, mean 2985 —
+identical to the same project rendered from files. Not "looks right", identical.
+
 ## 08-11-2026
 
 Building the embedder into LMMS itself

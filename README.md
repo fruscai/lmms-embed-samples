@@ -54,6 +54,20 @@ Soundfonts, gig banks and patches are left out on purpose. Those are instrument 
 on a machine rather than audio belonging to the song, so embedding them would be like shipping a
 copy of every stock plugin with the project. VST paths are not audio at all.
 
+## Command line
+
+    lmms embedsamples <in> <out>
+
+Same writer the checkbox uses. Useful for a folder of projects, and it is how the feature is
+actually tested — driving a GUI to verify a file format is a bad way to spend an afternoon.
+
+Adding it found a segfault the GUI could never expose: `embedResources()` reads the engine sample
+rate, and CLI commands never start an audio engine, so the pointer is null.
+
+⚠️ **Embedding refuses the whole save if any single reference cannot be read**, and names the one
+that failed. LMMS's own DirtyLove demo trips this, because three TripleOscillator slots point at a
+`samples/empty.wav` that does not resolve.
+
 ## How it fits
 
 The save path already threaded a bool down from the dialog to the writer:
@@ -159,16 +173,29 @@ The result is ad-hoc signed, not notarized. On another Mac it needs right-click 
 
 ## Verifying it worked
 
-Decode the base64 straight out of the saved file rather than trusting a render. On the test project,
-18 `audiofileprocessor` elements, sources 2.000 s of 220 Hz at 48 kHz:
+Decode the base64 straight out of the saved file rather than trusting a render, and point every
+reference at a wave of a DIFFERENT length. Then a payload landing in the wrong attribute cannot pass
+silently — which is exactly how the `sampleclip` bug hid, and a total count would have missed it.
 
-    audiofileprocessor with src=         0
-    audiofileprocessor with sampledata=  18
-    frames        88056        (2.0 s at 44100, converted from 96000 at 48000)
-    measured tone 219.86 Hz
+On a project carrying one of every embeddable element:
 
-If the resample step were missing that tone would read 202 Hz. The 0.14 Hz gap is zero-crossing
-quantization, not pitch error.
+    element              payloads  frames -> source
+    audiofileprocessor   6         4410, plus five of the demo's own samples
+    slicert              1         4410
+    sampleclip           1         8820
+    tripleoscillator     3         13230, 17640, 22050
+    elvol elcut elres    6         26460, 30869, 35280   (twice each)
+    lfocontroller        1         39690
+    references still on disk: 0
+
+Then delete every source wave and render from `/`:
+
+    4066144 frames, peak 27466, mean 2985
+
+Identical to the same project rendered from files. Not "sounds fine", identical.
+
+Separately, for the sample rate: a 2.000 s 220 Hz tone at 48 kHz embeds to 88200 frames and measures
+219.86 Hz. Without the conversion it would read 202 Hz.
 
 ## Notes
 
