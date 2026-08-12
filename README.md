@@ -29,6 +29,31 @@ A second checkbox in the Save As dialog, next to the existing bundle one:
 Tick it and every sample gets written into the file as base64. Tick both and bundling wins, because
 it's the older option and it leaves the samples on disk as editable files.
 
+## What actually gets embedded
+
+More than LMMS's own resource map covers. `ELEMENTS_WITH_RESOURCES` lists two elements, which is far
+short of what a song can reference:
+
+    audiofileprocessor   src              -> sampledata      converted to engine rate
+    slicert              src              -> sampledata      converted to engine rate
+    sampleclip           src              -> data            keeps its own sample_rate
+    tripleoscillator     userwavefile0/1/2 -> userwavedata0/1/2
+    elvol elcut elres    userwavefile     -> userwavedata    three per instrument
+    lfocontroller        userwavefile     -> userwavedata
+
+The payload attribute differs per element and getting it wrong loses the audio without a word: the
+base64 lands where the loader never looks, and the path it needed has already been removed.
+
+Only three of those could carry embedded audio at all before this patch. The user wave ones had no
+base64 path anywhere — they only ever called `fromFile` — so `userwavedata` is new. **Stock LMMS
+ignores it** and gives an empty slot with no warning, so projects with embedded user waves only
+fully work in this build. `audiofileprocessor` and `sampleclip` embedding stays portable to stock
+1.3.
+
+Soundfonts, gig banks and patches are left out on purpose. Those are instrument libraries installed
+on a machine rather than audio belonging to the song, so embedding them would be like shipping a
+copy of every stock plugin with the project. VST paths are not audio at all.
+
 ## How it fits
 
 The save path already threaded a bool down from the dialog to the writer:
@@ -41,9 +66,13 @@ The save path already threaded a bool down from the dialog to the writer:
 and rewrites the attribute. Embedding is the same walk with a different action, so `embedResources()`
 sits next to it. There are three ways to save now, so the bool becomes a `SaveMode` enum.
 
-## Two things this gets right that are easy to get wrong
+## Three things this gets right that are easy to get wrong
 
-Measured, not assumed. Both of these were caught by testing the output, not by reading the code.
+Measured, not assumed. All of these were caught by testing the output, not by reading the code.
+
+**sampleclip does not store audio the way audiofileprocessor does.** It reads `data`, not
+`sampledata`, and writes `sample_rate` beside it. Writing the wrong attribute and then removing
+`src` loses a Sample track's audio outright, with no error at any point.
 
 **Embedded audio carries no sample rate.** `SampleBuffer::fromBase64` assumes the frames already
 match the engine rate — it says so in the default argument:
@@ -103,8 +132,10 @@ fails immediately on an extracted archive with no `.git`.
 
 ## Packaging
 
-`package-app.sh` builds the `.app` and installs it as "LMMS 1.3 Embed Branch", so it sits alongside
-an existing LMMS instead of fighting with it over the `.mmpz` association.
+`package-app.sh` builds the `.app` and installs it under its own name and bundle identifier, so it
+sits alongside an existing LMMS instead of fighting with it over the `.mmpz` association. Name,
+identifier and destination come from `LMMS_EMBED_NAME`, `LMMS_EMBED_ID` and `LMMS_EMBED_DEST`, so
+the same script builds each branch side by side without one replacing the other.
 
 It leans on `cpack`, which does all the real work and then fails at the very end looking for
 `dmgbuild`. That failure is expected and harmless — the app is finished and signed before that step
@@ -115,7 +146,8 @@ rather than Apple Clang, and it is not optional:
 
 - `libc++.1.dylib` finds `libunwind` through `@loader_path/../unwind`, which is correct in Homebrew's
   layout and wrong the moment `macdeployqt` moves libc++ into `Frameworks`. **The app will not launch
-  at all until this is bundled.**
+  at all until `libunwind` and `libc++abi` are both bundled.** Miss either one and the error names
+  only the one it happened to look for first.
 - `/opt/homebrew` sits ahead of the bundle in the library search order, so the app quietly loads
   `libsamplerate` and friends from Homebrew. It runs fine on the build machine and fails on anyone
   else's. Dropping those rpaths makes it actually self-contained.
