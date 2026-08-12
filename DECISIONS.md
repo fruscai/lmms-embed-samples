@@ -1,5 +1,46 @@
 # Decisions
 
+## 08-12-2026 - The native feature cannot produce a 1.2 compatible file
+
+Worth writing down because it is the opposite of what the whole embedder effort was for, and it is
+not fixable by changing anything about embedding.
+
+The goal was one file that opens and plays in both 1.2 and 1.3. A project saved by this build cannot
+do that, and embedding is not the reason. Checked on two files saved by our own build:
+
+    1.3-only elements: midiclip, mixer, mixerchannel, automationclip
+    srcdata attrs    : 0
+
+Two independent blockers
+
+- **The element names.** LMMS 1.3 writes `midiclip`, `mixer` and `mixerchannel` where 1.2 has
+  `pattern` and `fxmixer`. `mixer` is written on every save and `midiclip` appears the moment there
+  are any notes, so this is every project, not an edge case. The relinker repo's DECISIONS already
+  concluded a body containing those cannot open in 1.2 at any size
+- **The attribute.** 1.2 checks `sampledata` and then reads `srcdata`, so even a parseable file
+  would load an empty string and render silence
+
+So LMMS 1.3 saves 1.3 format. Any save from this build, embedded or not, is a 1.3 project. Adding
+`srcdata` alongside `sampledata` would remove the second blocker and leave the first one standing,
+which buys nothing on its own.
+
+What this means in practice
+
+- **The native option is for 1.3 recipients.** That is what it is good at: one file, no resources
+  folder, nothing to resolve
+- **The 1.2 path stays with the HTML tool**, which writes both attributes and has `compat12.js` for
+  the header and the empty `midicontrollers`. And even that only works when the body is 1.2 shaped
+  to begin with, which means authored in 1.2.2 rather than round-tripped through 1.3
+- ⚠️ **Opening a 1.2 project in this build and saving it converts it to 1.3 and it will not go back.**
+  For anything headed to a 1.2 grader, do not round-trip it through here
+
+Not doing the downgrade converter
+
+Rewriting `midiclip` to `pattern`, `mixer` to `fxmixer` and the rest is a real converter, not a
+relabel. The relinker repo already decided that projects genuinely containing 1.3 structure should
+be warned about rather than relabelled, on the grounds that a file which looks converted and is not
+is worse than one that refuses. Same reasoning applies here.
+
 ## 08-11-2026 - Building the embedder into LMMS itself
 
 The HTML embedder already does this from outside. This is the same thing as a native save option,
