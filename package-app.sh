@@ -1,5 +1,7 @@
 #!/bin/bash
-# Package the patched LMMS as "LMMS 1.3 Embed Branch.app" and install it.
+# Package the patched LMMS as its own app and install it.
+# Name and identifier come from LMMS_EMBED_NAME / LMMS_EMBED_ID, so the same
+# script builds each branch side by side without them overwriting each other.
 #
 # cpack does the real work, but it fails at the very end looking for dmgbuild.
 # That failure is expected and harmless here: the .app is finished and signed
@@ -12,7 +14,16 @@ set -e
 
 SRCDIR="${1:-$HOME/Downloads/lmms-src}"
 BUILD="$SRCDIR/build"
-DEST="/Applications/LMMS 1.3 Embed Branch.app"
+# Override with LMMS_EMBED_DEST to install somewhere else. Anywhere works, the
+# bundle carries its own libraries and does not care where it sits.
+# Kept as its own variable because an apostrophe in the path is a syntax error
+# inside a ${VAR:-default} expansion, even in double quotes.
+APP_NAME="${LMMS_EMBED_NAME:-LMMS FULL EMBED Branch V2}"
+# Its own identifier per build, so Launch Services lists each one separately
+# instead of them fighting over the .mmpz association.
+BUNDLE_ID="${LMMS_EMBED_ID:-io.lmms.embedbranch.v2}"
+DEFAULT_DEST="/Volumes/Amine's External 6TN 1/Amethyst/TOOLS/$APP_NAME.app"
+DEST="${LMMS_EMBED_DEST:-$DEFAULT_DEST}"
 LLVM=/opt/homebrew/opt/llvm/lib
 
 echo "==> cpack (the dmgbuild error at the end is expected)"
@@ -31,21 +42,25 @@ cp -R "$STAGED" "$DEST"
 
 echo "==> renaming the bundle"
 P="$DEST/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName LMMS 1.3 Embed Branch" "$P"
-/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string LMMS 1.3 Embed Branch" "$P" 2>/dev/null \
-	|| /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName LMMS 1.3 Embed Branch" "$P"
-# Its own identifier, so Launch Services lists it separately from other LMMS installs
-# instead of the two fighting over the .mmpz association.
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier io.lmms.embedbranch" "$P"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$P"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$P" 2>/dev/null \
+	|| /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$P"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$P"
 
 echo "==> bundling the LLVM runtime macdeployqt misses"
 F="$DEST/Contents/Frameworks"
 # libc++.1.dylib finds libunwind through @loader_path/../unwind, which is correct in
 # Homebrew's layout and wrong once macdeployqt moves libc++ into Frameworks. The app
 # will not start without this.
-cp -L "$LLVM/unwind/libunwind.1.dylib" "$F/"
-chmod u+w "$F/libunwind.1.dylib"
-install_name_tool -id "@rpath/libunwind.1.dylib" "$F/libunwind.1.dylib"
+# libc++abi and libunwind are both needed. Miss either one and the app does not
+# start, with an error naming only the one it happened to look for first.
+for lib in "$LLVM/c++/libc++abi.1.dylib" "$LLVM/unwind/libunwind.1.dylib"; do
+	name=$(basename "$lib")
+	cp -L "$lib" "$F/"
+	chmod u+w "$F/$name"
+	install_name_tool -id "@rpath/$name" "$F/$name"
+	echo "   bundled $name"
+done
 
 SHARP=$(find -L /opt/homebrew/opt/webp/lib -name "libsharpyuv.0.dylib" -print -quit 2>/dev/null || true)
 if [ -n "$SHARP" ]; then
