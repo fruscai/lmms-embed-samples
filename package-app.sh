@@ -21,7 +21,7 @@ BUILD="$SRCDIR/build"
 # Keep the destination in its own variable rather than inline. An apostrophe in
 # the path is a syntax error inside a ${VAR:-default} expansion, even in double
 # quotes, which is easy to hit on a drive named after somebody.
-APP_NAME="${LMMS_EMBED_NAME:-LMMS FULL EMBED Branch V2}"
+APP_NAME="${LMMS_EMBED_NAME:-LMMS 1.3 - Full AudioEmbed (v2)}"
 # Its own identifier per build, so Launch Services lists each one separately
 # instead of them fighting over the .mmpz association.
 BUNDLE_ID="${LMMS_EMBED_ID:-io.lmms.embedbranch.v2}"

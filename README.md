@@ -157,6 +157,11 @@ sits alongside an existing LMMS instead of fighting with it over the `.mmpz` ass
 identifier and destination come from `LMMS_EMBED_NAME`, `LMMS_EMBED_ID` and `LMMS_EMBED_DEST`, so
 the same script builds each branch side by side without one replacing the other.
 
+The two builds this produces:
+
+    LMMS 1.3 - AudioEmbed (v1)        commit d39c82c4, stock attributes only
+    LMMS 1.3 - Full AudioEmbed (v2)   everything, plus the embedsamples CLI
+
 It leans on `cpack`, which does all the real work and then fails at the very end looking for
 `dmgbuild`. That failure is expected and harmless — the app is finished and signed before that step
 runs, and this only wants the app.

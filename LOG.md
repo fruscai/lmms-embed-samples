@@ -24,7 +24,9 @@ The native option cannot make a 1.2 file, which was the whole original point
 Two hours lost to my own bad check
 
 - Concluded V2 was crashing on launch. It was not. `pgrep -f "Embed Branch V2"` is case sensitive
-  and the app is `FULL EMBED Branch V2`, so the pattern never matched a running process
+  and the app was called `FULL EMBED Branch V2` at the time, so the pattern never matched a
+  running process. (Renamed to `LMMS 1.3 - Full AudioEmbed (v2)` on 08-12; the old name is kept
+  here because it is the whole reason the bug happened)
 - Meanwhile LMMS was sitting on a recovery-file dialog, hidden behind another window, on a monitor
   I was not capturing. Every "it exited" reading was wrong
 - Lesson worth keeping: when a check says a thing is absent, confirm the check can see the thing at
