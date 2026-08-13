@@ -5,6 +5,49 @@ follow underneath.
 
 ---
 
+## ADR-0002: Embed what can be read rather than refusing the whole project
+
+**Date:** 2026-08-12
+**Status:** Accepted, implemented.
+**Supersedes:** the original all-or-nothing behaviour.
+
+### Context
+
+Embedding refused the entire save if any single reference could not be read. That sounds safe and is
+not, because a project can carry references nobody added deliberately. LMMS's own DirtyLove demo has
+three TripleOscillator slots pointing at a `samples/empty.wav` that does not resolve, so embedding a
+stock demo project failed outright. One bad reference cost every other sample in the project.
+
+Earlier still it did not refuse, it segfaulted, for an unrelated reason recorded in the log.
+
+### Decision
+
+Embed everything readable. A sample that cannot be read is left exactly as it is, still pointing at
+its original path, and named in a warning. The project is written either way.
+
+The alternative considered was removing the path and writing no payload. Rejected: that produces a
+silently empty slot, and a missing file that says so is better than an empty one that does not.
+
+### Consequences
+
+**The result stays openable, which was the requirement.** The project loads in LMMS 1.3 and reports
+the missing file exactly as it would have without embedding. Verified with a deliberately broken
+reference and every source wave deleted:
+
+    payloads embedded        : 17
+    references still on disk : 1
+    render exit              : 0
+    reported                 : Sample not found: /nope/missing_sample.wav
+
+**A partially embedded project is no longer obviously self-contained.** It carries audio for most of
+its samples and a path for the rest, so it will play everywhere except for the parts that were
+already broken. The warning names them, and `references still on disk` in the verifier is the
+number to check before shipping one.
+
+**Fully readable projects are unaffected**: 18 payloads, nothing left on disk.
+
+---
+
 ## ADR-0001: The native embed feature will not serve LMMS 1.2
 
 **Date:** 2026-08-12
