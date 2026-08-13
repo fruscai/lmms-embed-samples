@@ -62,6 +62,21 @@ missed the sampleclip bug entirely; frame counts cannot.
 Then deleted every source wave and rendered from `/`: 4066144 frames, peak 27466, mean 2985 —
 identical to the same project rendered from files. Not "looks right", identical.
 
+BIG ONE: I claimed V2 files need V2, and never checked
+
+- Said repeatedly, in the thread and in the docs, that a V2 embedded project only fully works in our
+  build. **Not true.** Stock LMMS 1.3 opens it, reports nothing missing, and renders 4066144 frames
+  at peak 32767, identical to our build. The mean differs by half a percent
+- Where it came from: read the code, saw stock has no branch reading `userwavedata`, concluded it
+  ignores the attribute. That part is correct. Then turned it into a claim about the whole FILE
+  being build-specific, which does not follow, and never ran the test
+- `/Applications/LMMS 1.3.app` was installed the whole time, same upstream commit we forked from.
+  One render would have caught it on day one
+- The real limit is narrow: only the SHAPE of a custom oscillator or LFO wave fails to travel.
+  Samples all travel
+- ⚠️ commit messages in `fruscai/lmms` history still carry the old framing. The files are corrected;
+  the history is not, because rewriting pushed commits is worse than a stale sentence
+
 BIG ONE: embedding a project with a missing sample segfaulted
 
 - Found by testing the FAILURE path, not the success path. Everything above passed while this sat
@@ -146,9 +161,12 @@ Going wider, because two elements is not the whole story
 - Soundfonts, gig banks and patches stay out. Those are instrument libraries installed on a
   machine, not audio belonging to the song. Embedding them would be like shipping a copy of every
   stock plugin with the project
-- ⚠️ `userwavedata` is new, so stock LMMS ignores it and gives an empty slot with no warning.
-  Projects with embedded user waves only fully work in this build. `audiofileprocessor` and
-  `sampleclip` embedding stays portable to stock 1.3
+- ⚠️ `userwavedata` is new, so stock LMMS ignores it. **CORRECTED 08-12: I wrote here that projects
+  with embedded user waves "only fully work in this build". That was wrong and I never tested it.**
+  Measured against stock LMMS 1.3 at the same upstream commit, sources deleted: it opens, reports
+  nothing missing, 4066144 frames at peak 32767, identical to our build. Only the SHAPE of a custom
+  oscillator or LFO wave is skipped. Every actual sample travels, because `sampledata`, `data` and
+  `sample_rate` are LMMS's own attributes
 
 Packaging
 
