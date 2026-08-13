@@ -45,10 +45,16 @@ The payload attribute differs per element and getting it wrong loses the audio w
 base64 lands where the loader never looks, and the path it needed has already been removed.
 
 Only three of those could carry embedded audio at all before this patch. The user wave ones had no
-base64 path anywhere — they only ever called `fromFile` — so `userwavedata` is new. **Stock LMMS
-ignores it** and gives an empty slot with no warning, so projects with embedded user waves only
-fully work in this build. `audiofileprocessor` and `sampleclip` embedding stays portable to stock
-1.3.
+base64 path anywhere — they only ever called `fromFile` — so `userwavedata` is new.
+
+**A file written by this patch still opens in stock LMMS 1.3.** Measured against stock at the same
+upstream commit, with every source file deleted: it loads, reports nothing missing, and renders
+4066144 frames at peak 32767 against our build's identical 4066144 and 32767. Mean differs by half a
+percent, which is the custom oscillator waves stock skips because it does not know the attribute.
+
+So the limit is narrower than "needs this build": every actual SAMPLE travels, because
+`sampledata`, `data` and `sample_rate` are LMMS's own attributes. What does not travel is the SHAPE
+of a custom oscillator or LFO wave, silently.
 
 Soundfonts, gig banks and patches are left out on purpose. Those are instrument libraries installed
 on a machine rather than audio belonging to the song, so embedding them would be like shipping a
