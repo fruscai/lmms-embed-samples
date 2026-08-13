@@ -1,37 +1,8 @@
-From 2caeaf98f22079f98c8c0f8850aa83cc5eea68a6 Mon Sep 17 00:00:00 2001
+From 7f2f9cd120e9ca94fbcc4204922fa8642108f8bb Mon Sep 17 00:00:00 2001
 From: fruscai <103607006+fruscai@users.noreply.github.com>
 Date: Tue, 11 Aug 2026 18:34:56 -0400
-Subject: [PATCH 2/2] Add "Save with embedded samples" save option
+Subject: [PATCH 2/8] Add "Save with embedded samples" save option
 
-Writes each referenced sample into the project file as base64 instead of
-pointing at it on disk, so the project opens and plays on a machine that
-does not have the audio files. This is the same idea as a project bundle,
-minus the folder: the result is still a single .mmpz.
-
-The save path already threaded a bool down to DataFile::writeFile for
-bundling. There are three ways to save now, so that becomes a SaveMode
-enum and embedResources() sits next to copyResources(), walking the same
-ELEMENTS_WITH_RESOURCES map.
-
-Two things worth calling out:
-
-Embedded audio carries no sample rate. SampleBuffer::fromBase64 assumes
-the engine rate while fromFile hands back the file's own rate, so a
-sample recorded at anything else plays back at the wrong speed. A 48 kHz
-source embedded as-is renders a 220 Hz tone at 202 Hz. embedResources()
-converts to the engine rate through AudioResampler first.
-
-AudioResampler always passes end_of_input = 0, so libsamplerate keeps the
-last frames in its filter delay and never flushes them, truncating the
-end of every sample (144 frames for a 48 kHz source at SincBest). The
-input is padded with silence to push the tail through and the output is
-cut back to the expected length.
-
-"src" is read before "sampledata" when loading, so it is removed rather
-than blanked. factorysample: references are left alone, since they
-resolve on any install and embedding them only inflates the file.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ---
  include/DataFile.h                     |  11 +-
  include/Song.h                         |   9 +-

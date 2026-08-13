@@ -1,0 +1,36 @@
+From 72979639dcc50e1da726c9f8c469c2ea65d6aad9 Mon Sep 17 00:00:00 2001
+From: fruscai <103607006+fruscai@users.noreply.github.com>
+Date: Wed, 12 Aug 2026 22:20:36 -0400
+Subject: [PATCH 6/8] Check the sample exists before handing it to SampleBuffer
+
+---
+ src/core/DataFile.cpp | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/core/DataFile.cpp b/src/core/DataFile.cpp
+index 5f4faafb..2d87a4bc 100644
+--- a/src/core/DataFile.cpp
++++ b/src/core/DataFile.cpp
+@@ -698,6 +698,19 @@ bool DataFile::embedResources(QString* failedReference)
+ 						+ path.remove(0, PathUtil::basePrefix(PathUtil::Base::LocalDir).length());
+ 				}
+ 
++				// Check before handing it to SampleBuffer. On failure fromFile returns
++				// emptyBuffer(), which default constructs a SampleBuffer, whose default
++				// member initialiser reads Engine::audioEngine()->outputSampleRate() and
++				// segfaults when there is no engine. That is an upstream trap and it only
++				// ever fires on the failure path, which is exactly where it is least
++				// welcome. Checking first keeps us out of it and gives a better message.
++				if (!QFileInfo(path).exists())
++				{
++					qWarning() << "ERROR: Sample not found for embedding:" << reference;
++					if (failedReference) { *failedReference = reference; }
++					return false;
++				}
++
+ 				auto buffer = SampleBuffer::fromFile(path);
+ 				if (!buffer || buffer->empty())
+ 				{
+-- 
+2.39.3 (Apple Git-145)
+

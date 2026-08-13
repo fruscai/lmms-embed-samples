@@ -1,0 +1,85 @@
+From 4e2b73c4d347086278926bd3e2f2e0cbefb704d5 Mon Sep 17 00:00:00 2001
+From: fruscai <103607006+fruscai@users.noreply.github.com>
+Date: Tue, 11 Aug 2026 19:50:10 -0400
+Subject: [PATCH 3/8] Fix two ways embedding silently lost audio
+
+---
+ include/Song.h        |  9 ++++++++-
+ src/core/DataFile.cpp | 28 +++++++++++++++++++++-------
+ 2 files changed, 29 insertions(+), 8 deletions(-)
+
+diff --git a/include/Song.h b/include/Song.h
+index 7b6c926b..013067c2 100644
+--- a/include/Song.h
++++ b/include/Song.h
+@@ -98,7 +98,14 @@ public:
+ 		void setDefaultOptions() {
+ 			discardMIDIConnections.setValue(false);
+ 			saveAsProjectBundle.setValue(false);
+-			saveWithEmbeddedSamples.setValue(false);
++			// saveWithEmbeddedSamples is deliberately NOT reset here.
++			//
++			// Bundling can afford to reset, because writing a bundle a second
++			// time by accident is loud: it refuses to overwrite the folder. If
++			// embedding reset, saving again after an embed would quietly write
++			// the project back out with file paths in it and no warning, which
++			// hands back exactly the dependency the option exists to remove.
++			// Losing the audio silently is far worse than embedding twice.
+ 		}
+ 	};
+ 
+diff --git a/src/core/DataFile.cpp b/src/core/DataFile.cpp
+index 29081816..044c5a7a 100644
+--- a/src/core/DataFile.cpp
++++ b/src/core/DataFile.cpp
+@@ -602,6 +602,17 @@ bool DataFile::embedResources()
+ 
+ 	for (const auto& [tagName, attributes] : ELEMENTS_WITH_RESOURCES)
+ 	{
++		// The two elements do NOT store embedded audio the same way, and writing the
++		// wrong attribute loses the audio silently: the payload lands somewhere the
++		// loader never looks while the path it needed has already been removed.
++		//
++		// audiofileprocessor reads "sampledata" and stores no rate at all, so its
++		// loader assumes the engine rate and the audio has to be converted first.
++		// sampleclip reads "data" and writes "sample_rate" beside it, so it keeps
++		// whatever rate the file was and needs no conversion.
++		const bool isClip = tagName == QLatin1String("sampleclip");
++		const QString payloadAttribute = isClip ? QStringLiteral("data") : QStringLiteral("sampledata");
++
+ 		QDomNodeList list = elementsByTagName(tagName);
+ 
+ 		for (int i = 0; !list.item(i).isNull(); ++i)
+@@ -639,19 +650,22 @@ bool DataFile::embedResources()
+ 					return false;
+ 				}
+ 
+-				// Embedded audio carries no sample rate of its own. fromBase64 assumes
+-				// the engine rate while fromFile hands back the file's own rate, so a
+-				// sample recorded at anything else plays back at the wrong speed unless
+-				// it gets converted here first.
+-				if (buffer->sampleRate() != engineRate)
++				// Only convert where the rate cannot travel with the audio. fromFile
++				// hands back the file's own rate, and audiofileprocessor's loader
++				// assumes the engine rate, so a mismatch there plays at the wrong
++				// speed. sampleclip records the rate next to the payload and reads it
++				// back, so converting it would be a needless generation of quality
++				// loss.
++				if (!isClip && buffer->sampleRate() != engineRate)
+ 				{
+ 					buffer = resampleBuffer(*buffer, engineRate);
+ 					if (!buffer) { return false; }
+ 				}
+ 
+-				el.setAttribute("sampledata", buffer->toBase64());
++				el.setAttribute(payloadAttribute, buffer->toBase64());
++				if (isClip) { el.setAttribute("sample_rate", buffer->sampleRate()); }
+ 
+-				// "src" is read before "sampledata" when loading, so leaving it in place
++				// "src" is read before the payload when loading, so leaving it in place
+ 				// would win over the audio that was just embedded. It has to go, not be
+ 				// blanked.
+ 				el.removeAttribute(attribute);
+-- 
+2.39.3 (Apple Git-145)
+

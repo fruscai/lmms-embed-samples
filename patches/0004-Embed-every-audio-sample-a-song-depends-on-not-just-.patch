@@ -1,0 +1,215 @@
+From 4a18c684c1995aa3204ab5031bb0610a8a8a58c9 Mon Sep 17 00:00:00 2001
+From: fruscai <103607006+fruscai@users.noreply.github.com>
+Date: Wed, 12 Aug 2026 00:20:04 -0400
+Subject: [PATCH 4/8] Embed every audio sample a song depends on, not just two
+ elements
+
+---
+ plugins/TripleOscillator/TripleOscillator.cpp |  9 +++
+ src/core/DataFile.cpp                         | 79 ++++++++++++++-----
+ src/core/EnvelopeAndLfoParameters.cpp         | 14 +++-
+ src/core/LfoController.cpp                    |  8 ++
+ 4 files changed, 90 insertions(+), 20 deletions(-)
+
+diff --git a/plugins/TripleOscillator/TripleOscillator.cpp b/plugins/TripleOscillator/TripleOscillator.cpp
+index 562b0da1..8721e47d 100644
+--- a/plugins/TripleOscillator/TripleOscillator.cpp
++++ b/plugins/TripleOscillator/TripleOscillator.cpp
+@@ -253,6 +253,10 @@ void TripleOscillator::saveSettings( QDomDocument & _doc, QDomElement & _this )
+ 					"useWaveTable" + QString::number (i+1 ) );
+ 		_this.setAttribute( "userwavefile" + is,
+ 					m_osc[i]->m_sampleBuffer->audioFile() );
++		if (m_osc[i]->m_sampleBuffer->audioFile().isEmpty() && !m_osc[i]->m_sampleBuffer->empty())
++		{
++			_this.setAttribute("userwavedata" + is, m_osc[i]->m_sampleBuffer->toBase64());
++		}
+ 	}
+ }
+ 
+@@ -289,6 +293,11 @@ void TripleOscillator::loadSettings( const QDomElement & _this )
+ 			}
+ 			else { Engine::getSong()->collectError(QString("%1: %2").arg(tr("Sample not found"), userWaveFile)); }
+ 		}
++		else if (auto userWaveData = _this.attribute("userwavedata" + is); !userWaveData.isEmpty())
++		{
++			m_osc[i]->m_sampleBuffer = SampleBuffer::fromBase64(userWaveData);
++			m_osc[i]->m_userAntiAliasWaveTable = Oscillator::generateAntiAliasUserWaveTable(m_osc[i]->m_sampleBuffer.get());
++		}
+ 	}
+ }
+ 
+diff --git a/src/core/DataFile.cpp b/src/core/DataFile.cpp
+index 044c5a7a..946e12a4 100644
+--- a/src/core/DataFile.cpp
++++ b/src/core/DataFile.cpp
+@@ -596,31 +596,74 @@ std::shared_ptr<const SampleBuffer> resampleBuffer(const SampleBuffer& buffer, s
+ 
+ 
+ 
++namespace {
++
++//! One embeddable audio reference: where the path lives, and where the audio goes.
++struct EmbedTarget
++{
++	const char* pathAttribute;
++	const char* payloadAttribute;
++	//! The loader assumes the engine rate, so the audio must be converted to match.
++	bool convertRate;
++	//! The element keeps a "sample_rate" of its own, so the original rate survives.
++	bool storesRate;
++};
++
++/*
++ * Every element in LMMS that names an audio file the song depends on.
++ *
++ * Kept separate from ELEMENTS_WITH_RESOURCES on purpose. That map drives
++ * bundling, and it lists only sampleclip and audiofileprocessor, which is why
++ * makebundle silently leaves user waves pointing at files that may not exist.
++ * Widening it would change what bundling does, which is a different job.
++ *
++ * The payload attribute differs per element and getting it wrong loses the
++ * audio without a word: the base64 lands where the loader never looks, and the
++ * path it needed has already been removed.
++ *
++ * Soundfonts (sf2player), gig banks (gigplayer) and patches (patman) are left
++ * out deliberately. Those are instrument libraries installed on a machine
++ * rather than audio belonging to the song, so embedding them would be like
++ * shipping a copy of every stock plugin with the project. VST paths are not
++ * audio at all.
++ */
++const std::map<QString, std::vector<EmbedTarget>> EMBEDDABLE_ELEMENTS = {
++	{"audiofileprocessor", {{"src", "sampledata", true, false}}},
++	{"slicert", {{"src", "sampledata", true, false}}},
++	// Carries its own sample_rate, so the original rate travels with the audio.
++	{"sampleclip", {{"src", "data", false, true}}},
++	// User waves are wavetables read by phase, not played back at a rate, so
++	// resampling them would only rewrite the table at a different resolution.
++	{"tripleoscillator",
++		{{"userwavefile0", "userwavedata0", false, false}, {"userwavefile1", "userwavedata1", false, false},
++			{"userwavefile2", "userwavedata2", false, false}}},
++	// The envelope and LFO nodes every instrument carries, three apiece.
++	{"elvol", {{"userwavefile", "userwavedata", false, false}}},
++	{"elcut", {{"userwavefile", "userwavedata", false, false}}},
++	{"elres", {{"userwavefile", "userwavedata", false, false}}},
++	{"lfocontroller", {{"userwavefile", "userwavedata", false, false}}},
++};
++
++} // namespace
++
++
++
++
+ bool DataFile::embedResources()
+ {
+ 	const auto engineRate = Engine::audioEngine()->outputSampleRate();
+ 
+-	for (const auto& [tagName, attributes] : ELEMENTS_WITH_RESOURCES)
++	for (const auto& [tagName, targets] : EMBEDDABLE_ELEMENTS)
+ 	{
+-		// The two elements do NOT store embedded audio the same way, and writing the
+-		// wrong attribute loses the audio silently: the payload lands somewhere the
+-		// loader never looks while the path it needed has already been removed.
+-		//
+-		// audiofileprocessor reads "sampledata" and stores no rate at all, so its
+-		// loader assumes the engine rate and the audio has to be converted first.
+-		// sampleclip reads "data" and writes "sample_rate" beside it, so it keeps
+-		// whatever rate the file was and needs no conversion.
+-		const bool isClip = tagName == QLatin1String("sampleclip");
+-		const QString payloadAttribute = isClip ? QStringLiteral("data") : QStringLiteral("sampledata");
+-
+ 		QDomNodeList list = elementsByTagName(tagName);
+ 
+ 		for (int i = 0; !list.item(i).isNull(); ++i)
+ 		{
+ 			QDomElement el = list.item(i).toElement();
+ 
+-			for (const auto& attribute : attributes)
++			for (const auto& target : targets)
+ 			{
++				const auto attribute = QString::fromLatin1(target.pathAttribute);
+ 				if (!el.hasAttribute(attribute)) { continue; }
+ 
+ 				const QString reference = el.attribute(attribute);
+@@ -653,17 +696,15 @@ bool DataFile::embedResources()
+ 				// Only convert where the rate cannot travel with the audio. fromFile
+ 				// hands back the file's own rate, and audiofileprocessor's loader
+ 				// assumes the engine rate, so a mismatch there plays at the wrong
+-				// speed. sampleclip records the rate next to the payload and reads it
+-				// back, so converting it would be a needless generation of quality
+-				// loss.
+-				if (!isClip && buffer->sampleRate() != engineRate)
++				// speed.
++				if (target.convertRate && buffer->sampleRate() != engineRate)
+ 				{
+ 					buffer = resampleBuffer(*buffer, engineRate);
+ 					if (!buffer) { return false; }
+ 				}
+ 
+-				el.setAttribute(payloadAttribute, buffer->toBase64());
+-				if (isClip) { el.setAttribute("sample_rate", buffer->sampleRate()); }
++				el.setAttribute(QString::fromLatin1(target.payloadAttribute), buffer->toBase64());
++				if (target.storesRate) { el.setAttribute("sample_rate", buffer->sampleRate()); }
+ 
+ 				// "src" is read before the payload when loading, so leaving it in place
+ 				// would win over the audio that was just embedded. It has to go, not be
+diff --git a/src/core/EnvelopeAndLfoParameters.cpp b/src/core/EnvelopeAndLfoParameters.cpp
+index 4d6e0f04..1f17f891 100644
+--- a/src/core/EnvelopeAndLfoParameters.cpp
++++ b/src/core/EnvelopeAndLfoParameters.cpp
+@@ -353,6 +353,14 @@ void EnvelopeAndLfoParameters::saveSettings( QDomDocument & _doc,
+ 	m_x100Model.saveSettings( _doc, _parent, "x100" );
+ 	m_controlEnvAmountModel.saveSettings( _doc, _parent, "ctlenvamt" );
+ 	_parent.setAttribute("userwavefile", m_userWave->audioFile());
++	// Only written when the wave came from base64 rather than a file, so the
++	// common case (no user wave at all) does not gain an attribute. Every
++	// instrument has three of these nodes, so an unconditional payload would
++	// bloat every project in LMMS.
++	if (m_userWave->audioFile().isEmpty() && !m_userWave->empty())
++	{
++		_parent.setAttribute("userwavedata", m_userWave->toBase64());
++	}
+ }
+ 
+ 
+@@ -390,7 +398,11 @@ void EnvelopeAndLfoParameters::loadSettings( const QDomElement & _this )
+ 		{
+ 			m_userWave = SampleBuffer::fromFile(_this.attribute("userwavefile"));
+ 		}
+-		else { Engine::getSong()->collectError(QString("%1: %2").arg(tr("Sample not found"), userWaveFile)); }  
++		else { Engine::getSong()->collectError(QString("%1: %2").arg(tr("Sample not found"), userWaveFile)); }
++	}
++	else if (const auto userWaveData = _this.attribute("userwavedata"); !userWaveData.isEmpty())
++	{
++		m_userWave = SampleBuffer::fromBase64(userWaveData);
+ 	}
+ 
+ 	updateSampleVars();
+diff --git a/src/core/LfoController.cpp b/src/core/LfoController.cpp
+index 097921e7..5203a065 100644
+--- a/src/core/LfoController.cpp
++++ b/src/core/LfoController.cpp
+@@ -224,6 +224,10 @@ void LfoController::saveSettings( QDomDocument & _doc, QDomElement & _this )
+ 	m_waveModel.saveSettings( _doc, _this, "wave" );
+ 	m_multiplierModel.saveSettings( _doc, _this, "multiplier" );
+ 	_this.setAttribute("userwavefile", m_userDefSampleBuffer->audioFile());
++	if (m_userDefSampleBuffer->audioFile().isEmpty() && !m_userDefSampleBuffer->empty())
++	{
++		_this.setAttribute("userwavedata", m_userDefSampleBuffer->toBase64());
++	}
+ }
+ 
+ 
+@@ -247,6 +251,10 @@ void LfoController::loadSettings( const QDomElement & _this )
+ 		}
+ 		else { Engine::getSong()->collectError(QString("%1: %2").arg(tr("Sample not found"), userWaveFile)); }
+ 	}
++	else if (const auto userWaveData = _this.attribute("userwavedata"); !userWaveData.isEmpty())
++	{
++		m_userDefSampleBuffer = SampleBuffer::fromBase64(userWaveData);
++	}
+ 
+ 	updateSampleFunction();
+ }
+-- 
+2.39.3 (Apple Git-145)
+
