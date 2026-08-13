@@ -157,7 +157,7 @@ once, in `guiSaveProjectAs`, where the answer belongs.
 If both boxes are ticked, bundling wins. It is the older option and it leaves the samples on disk as
 editable files, so it is the less destructive of the two.
 
-Resample to the engine rate before embedding
+Resample to the engine rate before embedding, and whose engine that is
 
 Measured, not assumed. `sampledata` is a raw frame array with no sample rate stored anywhere in it,
 so the loader has to assume one, and the header says out loud which one it assumes:
@@ -179,6 +179,15 @@ two channels. No new dependency and no hand-written interpolation.
 
 The resampled buffer gets constructed with NO audio file path, on purpose. Handing it one would put
 back the external dependency the whole feature exists to remove.
+
+⚠️ The rate targeted is the one on the machine doing the saving, and `sampledata` carries no rate to
+correct it later. A project embedded on a 48 kHz engine therefore plays fast on a 44.1 kHz one. The
+CLI has no engine at all and uses the configured rate, minimum 44100.
+
+`web/lmms-sample-embedder.html` in the relinker repo fixes its target at 44100 rather than reading a
+setting, because that is LMMS's default and a recipient is usually running defaults. For a file going
+to somebody else that is the safer choice, and it is the reason to prefer that tool for anything
+being shipped out.
 
 Pad the input so libsamplerate flushes
 

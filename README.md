@@ -106,6 +106,14 @@ But `fromFile` hands back the file's OWN rate, because `SampleDecoder::decode` r
 `sfInfo.samplerate`. So a 48 kHz sample embedded as-is plays flat by 48000/44100. A 220 Hz tone comes
 out at 202 Hz. `embedResources()` converts to the engine rate through `AudioResampler` first.
 
+⚠️ **That is the engine rate of the machine doing the saving.** `sampledata` still stores no rate, so
+a project embedded on a 48 kHz engine plays fast on a 44.1 kHz one. The CLI has no engine at all and
+falls back to the configured rate, minimum 44100.
+
+`web/lmms-sample-embedder.html` in the other repo fixes the target at 44100 instead, on the grounds
+that it is LMMS's default and the recipient is usually running defaults. For a file going to someone
+else that is the safer of the two.
+
 **libsamplerate never flushes.** `AudioResampler` always passes `end_of_input = 0`, so the last
 frames stay stuck in the filter delay and the end of every sample gets quietly truncated. Measured at
 144 frames, about 3 ms, for a 48 kHz source at SincBest. The input gets padded with silence to push
