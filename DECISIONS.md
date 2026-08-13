@@ -1,45 +1,73 @@
 # Decisions
 
-## 08-12-2026 - The native feature cannot produce a 1.2 compatible file
+Architecture decision records are at the top, newest first. Narrative notes on individual choices
+follow underneath.
 
-Worth writing down because it is the opposite of what the whole embedder effort was for, and it is
-not fixable by changing anything about embedding.
+---
 
-The goal was one file that opens and plays in both 1.2 and 1.3. A project saved by this build cannot
-do that, and embedding is not the reason. Checked on two files saved by our own build:
+## ADR-0001: The native embed feature will not serve LMMS 1.2
 
-    1.3-only elements: midiclip, mixer, mixerchannel, automationclip
-    srcdata attrs    : 0
+**Date:** 2026-08-12
+**Status:** Accepted. Closes the line of work that tried to make one build serve both versions.
+**Supersedes:** the working assumption from 08-11 that a native option could replace the HTML tool.
 
-Two independent blockers
+### Context
 
-- **The element names.** LMMS 1.3 writes `midiclip`, `mixer` and `mixerchannel` where 1.2 has
-  `pattern` and `fxmixer`. `mixer` is written on every save and `midiclip` appears the moment there
-  are any notes, so this is every project, not an edge case. The relinker repo's DECISIONS already
-  concluded a body containing those cannot open in 1.2 at any size
-- **The attribute.** 1.2 checks `sampledata` and then reads `srcdata`, so even a parseable file
-  would load an empty string and render silence
+The embedder exists so a project plays on a machine that does not have the audio files. The grader
+in play runs LMMS 1.2.2 while authoring happens in 1.3, so the target was one file that opens and
+plays in both.
 
-So LMMS 1.3 saves 1.3 format. Any save from this build, embedded or not, is a 1.3 project. Adding
-`srcdata` alongside `sampledata` would remove the second blocker and leave the first one standing,
-which buys nothing on its own.
+The native option was built on LMMS 1.3 (`master`, 1.3.0-alpha). Two files saved by that build were
+checked directly:
 
-What this means in practice
+    1.3-only elements present : midiclip, mixer, mixerchannel, automationclip
+    srcdata attributes        : 0
 
-- **The native option is for 1.3 recipients.** That is what it is good at: one file, no resources
-  folder, nothing to resolve
-- **The 1.2 path stays with the HTML tool**, which writes both attributes and has `compat12.js` for
-  the header and the empty `midicontrollers`. And even that only works when the body is 1.2 shaped
-  to begin with, which means authored in 1.2.2 rather than round-tripped through 1.3
-- ⚠️ **Opening a 1.2 project in this build and saving it converts it to 1.3 and it will not go back.**
-  For anything headed to a 1.2 grader, do not round-trip it through here
+Two independent blockers, only one of which is about embedding.
 
-Not doing the downgrade converter
+**Element names.** LMMS 1.3 writes `midiclip` where 1.2 has `pattern`, and `mixer` /
+`mixerchannel` where 1.2 has `fxmixer`. `mixer` is written on every save; `midiclip` appears as soon
+as the project contains any notes. This is not an edge case, it is every project.
 
-Rewriting `midiclip` to `pattern`, `mixer` to `fxmixer` and the rest is a real converter, not a
-relabel. The relinker repo already decided that projects genuinely containing 1.3 structure should
-be warned about rather than relabelled, on the grounds that a file which looks converted and is not
-is worse than one that refuses. Same reasoning applies here.
+**Attribute names.** LMMS 1.2 tests `sampledata` and then reads `srcdata`, so a file carrying only
+`sampledata` loads an empty string and renders silence with no error.
+
+The second is trivially fixable by writing both attributes. The first is not fixable from inside a
+1.3 build at all: the writer emits 1.3 structure because it IS 1.3.
+
+### Decision
+
+The native option targets LMMS 1.3 recipients only. It will not write `srcdata`, and no downgrade
+pass will be added to it.
+
+The 1.2 path stays with the standalone HTML tool, which writes both attributes and has `compat12.js`
+for the header and the empty `midicontrollers` nodes.
+
+### Consequences
+
+**The original goal is still reachable, by a different route.** A project authored in LMMS 1.2.2 and
+embedded with the HTML tool opens and plays in both. The constraint sits upstream of embedding: the
+project must not pass through 1.3.
+
+**Round-tripping is now a documented hazard.** Opening a 1.2 project in either of these builds and
+saving converts it to 1.3 permanently. For anything headed to a 1.2 grader this is a one-way door,
+and it will look unrelated to whatever change was actually being made.
+
+**Writing `srcdata` natively was considered and rejected.** It would clear the second blocker while
+the first still stands, so it buys nothing on its own and doubles file size for every 1.3 user to
+work around a bug in a branch that is not taking fixes.
+
+**A downgrade converter was considered and rejected.** Rewriting `midiclip` to `pattern` and the
+rest is a real converter, not a relabel, and 1.3 constructs exist that have no 1.2 equivalent. The
+relinker repo already settled the same question the same way: warn rather than relabel, because a
+file that looks converted and is not is worse than one that refuses.
+
+**What the native option is actually good for**, and why it was still worth building: one file, no
+resources folder, nothing to resolve, covering every element a song can reference rather than the
+two in `ELEMENTS_WITH_RESOURCES`. That is verified end to end and is not affected by any of the
+above.
+
+---
 
 ## 08-11-2026 - Building the embedder into LMMS itself
 
