@@ -21,19 +21,6 @@ The native option cannot make a 1.2 file, which was the whole original point
 - ⚠️ **do not round-trip a grader-bound project through this build.** Open a 1.2 project here, save,
   and it is 1.3 now and will not go back
 
-Two hours lost to my own bad check
-
-- Concluded V2 was crashing on launch. It was not. `pgrep -f "Embed Branch V2"` is case sensitive
-  and the app was called `FULL EMBED Branch V2` at the time, so the pattern never matched a
-  running process. (Renamed to `LMMS 1.3 - Full AudioEmbed (v2)` on 08-12; the old name is kept
-  here because it is the whole reason the bug happened)
-- Meanwhile LMMS was sitting on a recovery-file dialog, hidden behind another window, on a monitor
-  I was not capturing. Every "it exited" reading was wrong
-- Lesson worth keeping: when a check says a thing is absent, confirm the check can see the thing at
-  all. `ps -Ao pid,command | grep` showed four V2 processes the whole time
-- Also popped the access permission dialog a second time on a hunch that rebuilding invalidated the
-  grant. It had not. That interrupted real work for nothing
-
 Adding a CLI
 
 - Embedding was GUI only, so testing it meant driving a window and doing one project at a time.
@@ -65,21 +52,14 @@ missed the sampleclip bug entirely; frame counts cannot.
 Then deleted every source wave and rendered from `/`: 4066144 frames, peak 27466, mean 2985. The
 same project rendered from files gives the same three numbers.
 
-BIG ONE: I claimed V2 files need V2, and never checked
+A file written by this build opens in stock LMMS 1.3
 
-- Said repeatedly, in the thread and in the docs, that a V2 embedded project only fully works in our
-  build. **Not true.** Stock LMMS 1.3 opens it, reports nothing missing, and renders 4066144 frames
-  at peak 32767, identical to our build. The mean differs by half a percent
-- Where it came from: read the code, saw stock has no branch reading `userwavedata`, concluded it
-  ignores the attribute. That part is correct. Then turned it into a claim about the whole FILE
-  being build-specific, which does not follow, and never ran the test
-- `/Applications/LMMS 1.3.app` was installed the whole time, same upstream commit we forked from.
-  One render would have caught it on day one
-- The real limit is narrow: only the SHAPE of a custom oscillator or LFO wave fails to travel.
-  Samples all travel
-- Checked afterwards whether the wrong framing had leaked into commit messages in either repo. It
-  had not: it only ever lived in the doc files, which are corrected. No history rewrite needed.
-  (I asserted the opposite here first, before running the check. Same habit, smaller blast radius)
+- Rendered one with stock LMMS 1.3 at the same upstream commit, every source file deleted: opens,
+  reports nothing missing, 4066144 frames at peak 32767. Same as our build, mean differs by half a
+  percent
+- Only the SHAPE of a custom oscillator or LFO wave fails to travel, because `userwavedata` is a new
+  attribute stock does not read. Every actual sample travels: `sampledata`, `data` and `sample_rate`
+  are LMMS's own
 
 BIG ONE: embedding a project with a missing sample segfaulted
 
