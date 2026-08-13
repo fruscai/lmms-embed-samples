@@ -85,7 +85,7 @@ The native option targets LMMS 1.3 recipients only. It will not write `srcdata`,
 pass will be added to it.
 
 The 1.2 path stays with `web/lmms-sample-embedder.html` in the
-[lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) repo, or the Embed tab of
+[LMMS-Tools-Relinker-Embedder](https://github.com/fruscai/LMMS-Tools-Relinker-Embedder) repo, or the Embed tab of
 `web/lmms-tools.html`. Those write both attributes, and `tools/compat12.js` there handles the header
 and the empty `midicontrollers` nodes.
 

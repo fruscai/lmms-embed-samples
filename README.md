@@ -227,7 +227,7 @@ Separately, for the sample rate: a 2.000 s 220 Hz tone at 48 kHz embeds to 88200
 
 ## The other toolset
 
-[lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) does this from outside LMMS, as
+[LMMS-Tools-Relinker-Embedder](https://github.com/fruscai/LMMS-Tools-Relinker-Embedder) does this from outside LMMS, as
 single HTML files that run in a browser with nothing installed. Three of them:
 
     web/lmms-sample-embedder.html   embeds audio into a project, same job as this patch
