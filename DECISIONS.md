@@ -52,7 +52,8 @@ number to check before shipping one.
 
 **Date:** 2026-08-12
 **Status:** Accepted. Closes the line of work that tried to make one build serve both versions.
-**Supersedes:** the working assumption from 08-11 that a native option could replace the HTML tool.
+**Supersedes:** the working assumption from 08-11 that a native option could replace
+`web/lmms-sample-embedder.html`.
 
 ### Context
 
@@ -83,13 +84,15 @@ The second is trivially fixable by writing both attributes. The first is not fix
 The native option targets LMMS 1.3 recipients only. It will not write `srcdata`, and no downgrade
 pass will be added to it.
 
-The 1.2 path stays with the standalone HTML tool, which writes both attributes and has `compat12.js`
-for the header and the empty `midicontrollers` nodes.
+The 1.2 path stays with `web/lmms-sample-embedder.html` in the
+[lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) repo, or the Embed tab of
+`web/lmms-tools.html`. Those write both attributes, and `tools/compat12.js` there handles the header
+and the empty `midicontrollers` nodes.
 
 ### Consequences
 
 **The original goal is still reachable, by a different route.** A project authored in LMMS 1.2.2 and
-embedded with the HTML tool opens and plays in both. The constraint sits upstream of embedding: the
+embedded with `web/lmms-sample-embedder.html` opens and plays in both. The constraint sits upstream of embedding: the
 project must not pass through 1.3.
 
 **Round-tripping is now a documented hazard.** Opening a 1.2 project in either of these builds and

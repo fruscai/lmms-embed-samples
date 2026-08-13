@@ -17,7 +17,7 @@ The native option cannot make a 1.2 file, which was the whole original point
 - Checked two files our own build saved: `midiclip`, `mixer`, `mixerchannel`, `automationclip`, and
   zero `srcdata`. LMMS 1.3 writes 1.3 element names on every save, so 1.2 cannot parse them at all
 - That has nothing to do with embedding and cannot be fixed by changing it. The 1.2 path stays with
-  the HTML tool
+  `web/lmms-sample-embedder.html` in the relinker repo, which writes `srcdata` too
 - ⚠️ **do not round-trip a grader-bound project through this build.** Open a 1.2 project here, save,
   and it is 1.3 now and will not go back
 

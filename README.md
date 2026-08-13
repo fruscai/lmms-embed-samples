@@ -217,12 +217,21 @@ Separately, for the sample rate: a 2.000 s 220 Hz tone at 48 kHz embeds to 88200
 [`WHERE-WE-LEFT-OFF.md`](WHERE-WE-LEFT-OFF.md) is the current state and what is still open.
 [`docs/LEXICON.md`](docs/LEXICON.md) is how the writing in here is meant to read.
 
-## Related
+## The other toolset
 
-[lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) does the same embedding from
-outside LMMS, as standalone HTML tools, plus bulk path relinking across a whole folder of projects.
-That one also handles LMMS 1.2, which this patch deliberately doesn't — see its `DECISIONS.md` for
-the 1.2 versus 1.3 tree.
+[lmms-path-relinker](https://github.com/fruscai/lmms-path-relinker) does this from outside LMMS, as
+single HTML files that run in a browser with nothing installed. Three of them:
+
+    web/lmms-sample-embedder.html   embeds audio into a project, same job as this patch
+    web/lmms-path-relinker.html     rewrites sample path roots across a folder of projects
+    web/lmms-tools.html             both of the above, on two independent tabs
+
+**The embedder there is what to use for LMMS 1.2.** It writes the payload to `srcdata` as well as
+`sampledata`, so the audio plays in 1.2 and 1.3 alike, and `tools/compat12.js` handles the header
+and the empty `midicontrollers` nodes. This patch deliberately does neither: see ADR-0001.
+
+It also works on a whole folder at once, which this patch only matches through `embedsamples` in a
+loop.
 
 ## License
 
