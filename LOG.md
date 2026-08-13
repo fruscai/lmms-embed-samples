@@ -44,8 +44,9 @@ Adding a CLI, which paid for itself immediately
 - Failure now names the sample it could not read. Before, the only clue was "failed to embed
   samples", which is no help when the culprit is something like the `samples/empty.wav` that ships
   in LMMS's own DirtyLove demo
-- ⚠️ that demo is a real reproducer: embedding **refuses the whole save** if any single reference
-  cannot be read, so V2 will not embed a stock LMMS demo project
+- ⚠️ that demo is a real reproducer: embedding refused the whole save if any single reference could
+  not be read, so V2 would not embed a stock LMMS demo project. **Changed later the same day, see
+  ADR-0002:** it now embeds what it can and leaves the rest pointing at their paths
 
 The all-element test, at last
 
@@ -76,8 +77,9 @@ BIG ONE: I claimed V2 files need V2, and never checked
   One render would have caught it on day one
 - The real limit is narrow: only the SHAPE of a custom oscillator or LFO wave fails to travel.
   Samples all travel
-- ⚠️ commit messages in `fruscai/lmms` history still carry the old framing. The files are corrected;
-  the history is not, because rewriting pushed commits is worse than a stale sentence
+- Checked afterwards whether the wrong framing had leaked into commit messages in either repo. It
+  had not: it only ever lived in the doc files, which are corrected. No history rewrite needed.
+  (I asserted the opposite here first, before running the check. Same habit, smaller blast radius)
 
 BIG ONE: embedding a project with a missing sample segfaulted
 
