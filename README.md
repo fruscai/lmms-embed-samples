@@ -215,6 +215,7 @@ Separately, for the sample rate: a 2.000 s 220 Hz tone at 48 kHz embeds to 88200
 [`LOG.md`](LOG.md) has what was hit building this and why, dated.
 [`DECISIONS.md`](DECISIONS.md) has the reasoning behind the choices.
 [`WHERE-WE-LEFT-OFF.md`](WHERE-WE-LEFT-OFF.md) is the current state and what is still open.
+[`docs/LEXICON.md`](docs/LEXICON.md) is how the writing in here is meant to read.
 
 ## Related
 
