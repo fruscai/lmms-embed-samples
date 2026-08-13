@@ -111,8 +111,8 @@ frames stay stuck in the filter delay and the end of every sample gets quietly t
 144 frames, about 3 ms, for a 48 kHz source at SincBest. The input gets padded with silence to push
 the tail through and the output is cut back to the expected length.
 
-Neither one throws an error. You get a file that looks completely fine and is wrong, which is the
-worst kind.
+Neither one throws an error. The project opens, the waveform is there, the sample plays, and it is
+wrong.
 
 ## Two smaller decisions
 

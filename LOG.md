@@ -34,7 +34,7 @@ Two hours lost to my own bad check
 - Also popped the access permission dialog a second time on a hunch that rebuilding invalidated the
   grant. It had not. That interrupted real work for nothing
 
-Adding a CLI, which paid for itself immediately
+Adding a CLI
 
 - Embedding was GUI only, so testing it meant driving a window and doing one project at a time.
   Added `lmms embedsamples <in> <out>`, mirroring `makebundle`
@@ -62,8 +62,8 @@ missed the sampleclip bug entirely; frame counts cannot.
     lfocontroller        39690
     references still on disk: 0
 
-Then deleted every source wave and rendered from `/`: 4066144 frames, peak 27466, mean 2985 —
-identical to the same project rendered from files. Not "looks right", identical.
+Then deleted every source wave and rendered from `/`: 4066144 frames, peak 27466, mean 2985. The
+same project rendered from files gives the same three numbers.
 
 BIG ONE: I claimed V2 files need V2, and never checked
 
