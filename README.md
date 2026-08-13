@@ -70,9 +70,11 @@ actually tested — driving a GUI to verify a file format is a bad way to spend 
 Adding it found a segfault the GUI could never expose: `embedResources()` reads the engine sample
 rate, and CLI commands never start an audio engine, so the pointer is null.
 
-⚠️ **Embedding refuses the whole save if any single reference cannot be read**, and names the one
-that failed. LMMS's own DirtyLove demo trips this, because three TripleOscillator slots point at a
-`samples/empty.wav` that does not resolve.
+**A sample that cannot be read is left alone, not dropped.** It keeps its original path, gets named
+in a warning, and everything else is still embedded. So the project still opens and reports that one
+missing file the way LMMS always would, instead of one bad reference costing every other sample.
+LMMS's own DirtyLove demo needs this: three TripleOscillator slots point at a `samples/empty.wav`
+that does not resolve.
 
 ## How it fits
 
