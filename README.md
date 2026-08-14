@@ -115,7 +115,7 @@ that it is LMMS's default and the recipient is usually running defaults. For a f
 else that is the safer of the two.
 
 **libsamplerate never flushes.** `AudioResampler` always passes `end_of_input = 0`, so the last
-frames stay stuck in the filter delay and the end of every sample gets quietly truncated. Measured at
+frames stay in the filter delay and the end of every sample is truncated with no error. Measured at
 144 frames, about 3 ms, for a 48 kHz source at SincBest. The input gets padded with silence to push
 the tail through and the output is cut back to the expected length.
 
@@ -183,7 +183,7 @@ rather than Apple Clang, and it is not optional:
   layout and wrong the moment `macdeployqt` moves libc++ into `Frameworks`. **The app will not launch
   at all until `libunwind` and `libc++abi` are both bundled.** Miss either one and the error names
   only the one it happened to look for first.
-- `/opt/homebrew` sits ahead of the bundle in the library search order, so the app quietly loads
+- `/opt/homebrew` sits ahead of the bundle in the library search order, so the app loads
   `libsamplerate` and friends from Homebrew. It runs fine on the build machine and fails on anyone
   else's. Dropping those rpaths makes it actually self-contained.
 

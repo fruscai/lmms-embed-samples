@@ -119,7 +119,7 @@ The bugs that mattered, all found by testing the output rather than reading the 
   would have shipped. Fixed by padding the input with silence and cutting the output back
 - **The save options reset after every save.** Fine for bundling, because writing a bundle twice by
   accident refuses loudly. For embedding it meant the checkbox turned itself off after one save, so
-  the next save quietly wrote the project back out with file paths in it. Saving twice undid the
+  the next save wrote the project back out with file paths in it, no warning. Saving twice undid the
   first save
 
 How that last one showed up, worth remembering
@@ -159,7 +159,7 @@ Packaging
   moves libc++ into Frameworks. **The app does not launch at all until libunwind and libc++abi are
   both bundled.** Miss either one and the error names only the one it looked for first
 - The bundle was also not self-contained on the first pass. `/opt/homebrew` sits ahead of it in the
-  library search order, so it quietly loaded `libsamplerate` from Homebrew and would have failed on
+  library search order, so it loaded `libsamplerate` from Homebrew and would have failed on
   anyone else's Mac. Dropping those rpaths fixed it
 - JACK is the deliberate exception, LMMS dlopens it through weakjack so a machine without it runs
   fine and just does not offer that backend
