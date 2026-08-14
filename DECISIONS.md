@@ -100,8 +100,8 @@ saving converts it to 1.3 permanently. For anything headed to a 1.2 grader this 
 and it will look unrelated to whatever change was actually being made.
 
 **Writing `srcdata` natively was considered and rejected.** It would clear the second blocker while
-the first still stands, so it buys nothing on its own and doubles file size for every 1.3 user to
-work around a bug in a branch that is not taking fixes.
+the first still stands. On its own it changes nothing, and it doubles file size for every 1.3 user
+to work around a bug in a branch that is not taking fixes.
 
 **A downgrade converter was considered and rejected.** Rewriting `midiclip` to `pattern` and the
 rest is a real converter, not a relabel, and 1.3 constructs exist that have no 1.2 equivalent. The
@@ -213,8 +213,8 @@ Remove `src`, do not blank it
     else if (auto sampleData = elem.attribute("sampledata"); !sampleData.isEmpty())
 
 Leaving `src=""` in place technically works, since empty counts as empty. Removing it is still the
-right call — an empty attribute sitting next to the audio invites exactly one confused bug later, and
-`saveSettings` writes `src` unconditionally so it would come straight back on the next save anyway.
+right call. `saveSettings` writes `src` unconditionally, so a blank one comes back on the next
+save.
 
 Skip `factorysample:`
 

@@ -71,12 +71,10 @@ BIG ONE: embedding a project with a missing sample segfaulted
         sample_rate_t m_sampleRate = Engine::audioEngine()->outputSampleRate();
 
   as a default member initialiser. So constructing one without an audio engine dereferences null
-- It only ever fires on the failure path, which is where a crash is least welcome and least likely
-  to be noticed. In the GUI there is an engine so it never shows
-- Fixed by checking the file exists before handing it over, which also means the error now names
-  the missing sample instead of the library that gave up
-- Left the upstream initialiser alone. It is a real trap for anything building a SampleBuffer
-  outside a session, but that class is used all through playback and it deserves its own change
+- It only fires on the failure path. In the GUI there is an engine, so it never shows there
+- Fixed by checking the file exists before handing it over. The error now names the missing sample
+- Left the upstream initialiser alone. It affects anything building a SampleBuffer outside a
+  session, and that class is used throughout playback, so it belongs in a separate change
 - ⚠️ so the earlier claim that embedding "refuses the whole save" on a bad reference was wrong. It
   crashed. Refusing is what it does NOW
 
