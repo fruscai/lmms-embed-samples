@@ -128,6 +128,30 @@ wrong.
 **`factorysample:` references are left alone.** Those ship with LMMS and resolve on any install, so
 embedding them only makes the file bigger for nothing.
 
+## Installing
+
+There are no prebuilt downloads yet. Build one of the two branches, then install the result.
+
+`cmake --build build --target package` produces the installer for the platform it runs on:
+
+    macOS     build/lmms-*.dmg
+    Windows   build/lmms-*.exe
+    Linux     build/lmms-*.AppImage
+
+**These are unsigned.** Every platform will warn about that, and each has its own way past it:
+
+- macOS: right-click the app, choose Open, then Open again in the dialog. Double-clicking will not
+  work the first time.
+- Windows: SmartScreen shows "Windows protected your PC". Click More info, then Run anyway.
+- Linux: `chmod +x lmms-*.AppImage` before running it.
+
+Code signing certificates are the only thing that removes these warnings, at roughly $100 a year per
+platform.
+
+The app installs under its own name and bundle identifier, so it sits alongside a normal LMMS
+install rather than replacing it. Both use the same `~/Documents/lmms` folder and the same
+`.lmmsrc.xml`, so samples and settings are shared.
+
 ## Applying it
 
     git clone https://github.com/LMMS/lmms.git
