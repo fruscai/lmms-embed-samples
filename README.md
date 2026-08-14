@@ -1,22 +1,20 @@
 # lmms-embed-samples
 
-A patch for LMMS that adds a "Save with embedded samples" option, so a project carries its own audio
-and plays on a machine that doesn't have the sample files.
+An LMMS project stores a file PATH for each sample. This patch writes the audio into the project
+file instead, which enables sending of project files with no audio resource folder; audio files now
+load in the project without needing anything in the gig folder or in any separate saved folder.
+
+Two versions. v1 is just AudioFileProcessor sample bundling. v2 is all possible audio files
+including the Triple Oscillator user defined wav section. Version differences in a later section of
+this readme.
 
 Against LMMS `master` (1.3.0-alpha) at commit `067c3ad4`.
 
-## The problem
+## Compared to a project bundle
 
-An LMMS project stores a file PATH for each sample. Send the project to someone else and LMMS finds
-nothing at that path, so you get instruments that load empty and make no sound.
-
-LMMS already ships one answer to this, the project bundle, which copies every sample into a
-`resources` folder next to the project and rewrites the paths to `local:`. That works, but it gives
-you a FOLDER rather than a file, it needs 1.3.0-alpha or later, and the folder has to stay intact.
-Zip it wrong or move the project out of it and you're back where you started.
-
-Embedding writes the audio into the project itself. There's no path left to break, nothing to keep
-next to anything, and the result is still a single `.mmpz` you can hand to someone.
+LMMS already ships the project bundle, which copies every sample into a `resources` folder next to
+the project and rewrites the paths to `local:`. It produces a FOLDER rather than a file, it needs
+1.3.0-alpha or later, and the folder has to stay intact. Embedding produces a single `.mmpz`.
 
 ## What it adds
 
